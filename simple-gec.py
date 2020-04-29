@@ -4,6 +4,7 @@ import torch
 from torch import nn, optim
 from torch.nn import CrossEntropyLoss
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from transformers import BertTokenizer, BertForSequenceClassification, BertForMaskedLM, BertModel, BertPreTrainedModel
 
 from utils import seed_everything, make_data_from_txt, GECDataset, BalancedDataLoader, Batch
@@ -14,6 +15,7 @@ class Config:
     n_epoch = 10
     batch_size = 5
     max_data_size = 1000
+    show_every = 10
     model_name = 'bert-base-uncased'
 
 class BertErrorCorrection(BertPreTrainedModel):
@@ -80,6 +82,7 @@ def train_model (net, dataloader, optimizer, num_epochs):
             epoch_loss = 0.0
             epoch_corrects = 0
             batch_processed_num = 0
+            bar = tqdm(total=len(dataloader))
 
             # データローダーからミニバッチを取り出す
             for i, (x, y) in enumerate(dataloader):
@@ -108,14 +111,19 @@ def train_model (net, dataloader, optimizer, num_epochs):
                     # epoch_recall = recall_score(y_true=labels.data.cpu(), y_pred=preds.cpu(), pos_label=0)
                     # epoch_precision = precision_score(y_true=labels.data.cpu(), y_pred=preds.cpu(), pos_label=0)
                 batch_processed_num += 1
-                if batch_processed_num % 1 == 0 and batch_processed_num != 0:
-                    print('Processed : ', batch_processed_num * config.batch_size, ' Loss : ', curr_loss)
+                SHOW_EVERY = config.show_every
+                if batch_processed_num % SHOW_EVERY == 0 and batch_processed_num != 0:
                     _, preds = torch.topk(logits, k=1)
                     preds2 = preds.squeeze(-1)
                     yText = tokenizer.convert_ids_to_tokens(preds2[0].tolist())
+                    y_text_part = " ".join(yText[:min(10, len(yText))])
                     xText = tokenizer.convert_ids_to_tokens(batch.source[0].tolist())
-                    print("orig:" + " ".join(xText))
-                    print("pred:" + " ".join(yText))
+                    x_text_part = " ".join(xText[:min(10, len(xText))])
+                    bar.set_postfix_str(f'Loss: {loss.item():.5f}, pred: {y_text_part}, org: {x_text_part}')
+                    bar.update(SHOW_EVERY)
+
+#                    print("orig:" + " ".join(xText))
+#                    print("pred:" + " ".join(yText))
 
                     # print(epoch_result)
 
