@@ -51,6 +51,7 @@ class BalancedDataLoader(BatchSampler):
     def __iter__(self):
         src_list = list()
         tgt_list = list()
+        src_tgt_list = list()
         # sampler is RandomSampler
         for i in self.sampler:
             self.count += 1
@@ -69,6 +70,7 @@ class BalancedDataLoader(BatchSampler):
 
                 src_list.clear()
                 tgt_list.clear()
+                src_tgt_list.clear()
                 yield src, tgt
 
 def subsequent_mask(size: int) -> torch.Tensor:

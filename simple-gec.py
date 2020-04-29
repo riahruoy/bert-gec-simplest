@@ -119,8 +119,8 @@ def train_model (net, dataloader, optimizer, num_epochs):
                     y_text_part = " ".join(yText[:min(10, len(yText))])
                     xText = tokenizer.convert_ids_to_tokens(batch.source[0].tolist())
                     x_text_part = " ".join(xText[:min(10, len(xText))])
+                    bar.set_description('Epoch {}/{} | '.format(epoch+1, num_epochs))
                     bar.set_postfix_str(f'Loss: {loss.item():.5f}, pred: {y_text_part}, org: {x_text_part}')
-                    bar.update(SHOW_EVERY)
 
 #                    print("orig:" + " ".join(xText))
 #                    print("pred:" + " ".join(yText))
@@ -131,7 +131,7 @@ def train_model (net, dataloader, optimizer, num_epochs):
             epoch_loss = epoch_loss / batch_processed_num
 
 
-            print('Epoch {}/{} | {:^5} | Loss:{:.4f}'.format(epoch + 1, num_epochs, phase, epoch_loss))
+            print('\n Epoch {}/{} | {:^5} | Loss:{:.4f}'.format(epoch + 1, num_epochs, phase, epoch_loss))
 
     return net
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
