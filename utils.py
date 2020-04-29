@@ -59,8 +59,12 @@ class BalancedDataLoader(BatchSampler):
             tgt_list.append(tgt)
             if self.count % self.batch_size == 0:
                 assert len(src_list) == self.batch_size
-                src = rnn.pad_sequence(src_list, batch_first=True, padding_value=self.pad_id)
-                tgt = rnn.pad_sequence(tgt_list, batch_first=True, padding_value=self.pad_id)
+                # fill with padding for max sentence length of src_list, tgt_list
+                src_tgt_list = src_list + tgt_list
+                padded_src_tgt_list = rnn.pad_sequence(src_tgt_list, batch_first=True, padding_value=self.pad_id)
+                src = padded_src_tgt_list[:self.batch_size]
+                tgt = padded_src_tgt_list[self.batch_size:]
+
                 src_list.clear()
                 tgt_list.clear()
                 yield src, tgt
@@ -73,11 +77,13 @@ def subsequent_mask(size: int) -> torch.Tensor:
 
 class Batch:
     def __init__(self, source: torch.Tensor, target: torch.Tensor = None, pad: int = 0):
+
         self.source = source
         self.source_mask = (source != pad)
+
         if target is not None:
             self.target = target
-            self.target_y = target[:, 1:]
+            self.target_y = target
             self.target_mask = self.make_std_mask(self.target, pad)
             self.n_tokens = (self.target != pad).sum()
 
