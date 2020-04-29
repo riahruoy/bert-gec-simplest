@@ -58,12 +58,14 @@ class BalancedDataLoader(BatchSampler):
             src_list.append(src)
             tgt_list.append(tgt)
             if self.count % self.batch_size == 0:
-                assert len(src_list) == self.batch_size
+                assert len(src_list) == len(tgt_list)
+
                 # fill with padding for max sentence length of src_list, tgt_list
                 src_tgt_list = src_list + tgt_list
+                size = len(src_list)
                 padded_src_tgt_list = rnn.pad_sequence(src_tgt_list, batch_first=True, padding_value=self.pad_id)
-                src = padded_src_tgt_list[:self.batch_size]
-                tgt = padded_src_tgt_list[self.batch_size:]
+                src = padded_src_tgt_list[:size]
+                tgt = padded_src_tgt_list[size:]
 
                 src_list.clear()
                 tgt_list.clear()
