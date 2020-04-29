@@ -64,7 +64,6 @@ train_dl = BalancedDataLoader(train_ds, tokenizer.pad_token_id, config.batch_siz
 
 
 
-
 model = BertErrorCorrection(tokenizer.vocab_size)
 
 
@@ -73,65 +72,53 @@ def train_model (net, dataloader, optimizer, num_epochs):
     torch.backends.cudnn.benchmark = True
 
     for epoch in range(num_epochs):
-        for phase in ['train', 'val']:
-            if phase == 'train':
-                net.train()
-            else:
-                net.eval()
+        net.train()
 
-            epoch_loss = 0.0
-            epoch_corrects = 0
-            batch_processed_num = 0
-            bar = tqdm(total=len(dataloader))
+        epoch_loss = 0.0
+        epoch_corrects = 0
+        batch_processed_num = 0
+        bar = tqdm(total=len(dataloader))
 
-            # データローダーからミニバッチを取り出す
-            for i, (x, y) in enumerate(dataloader):
-                batch = Batch(x.to(device), y.to(device), pad=tokenizer.pad_token_id)
-                # optimizerの初期化
-                optimizer.zero_grad()
+        # データローダーからミニバッチを取り出す
+        for i, (x, y) in enumerate(dataloader):
+            batch = Batch(x.to(device), y.to(device), pad=tokenizer.pad_token_id)
+            # optimizerの初期化
+            optimizer.zero_grad()
 
-                with torch.set_grad_enabled(phase == 'train'):
-                    # 5. BERTモデルでの予測とlossの計算、backpropの実行
-                    outputs = net(batch.source, token_type_ids=None, attention_mask=batch.source_mask, labels=batch.target)
-                    # loss and accuracy
-                    loss, logits = outputs[:2]
+            # 5. BERTモデルでの予測とlossの計算、backpropの実行
+            outputs = net(batch.source, token_type_ids=None, attention_mask=batch.source_mask, labels=batch.target)
+            # loss and accuracy
+            loss, logits = outputs[:2]
 
 
-                    if phase == 'train':
-                        loss.backward()
-                        optimizer.step()
+            loss.backward()
+            optimizer.step()
 
-                    curr_loss = loss.item()
-                    epoch_loss += curr_loss
-                    # epoch_result["TP"] += torch.sum((preds == labels.data) * (labels.data == 1)).cpu().numpy()
-                    # epoch_result["TN"] += torch.sum((preds == labels.data) * (labels.data == 0)).cpu().numpy()
-                    # epoch_result["FP"] += torch.sum((preds != labels.data) * (labels.data == 0)).cpu().numpy()
-                    # epoch_result["FN"] += torch.sum((preds != labels.data) * (labels.data == 1)).cpu().numpy()
+            curr_loss = loss.item()
+            epoch_loss += curr_loss
 
-                    # epoch_recall = recall_score(y_true=labels.data.cpu(), y_pred=preds.cpu(), pos_label=0)
-                    # epoch_precision = precision_score(y_true=labels.data.cpu(), y_pred=preds.cpu(), pos_label=0)
-                batch_processed_num += 1
-                SHOW_EVERY = config.show_every
-                if batch_processed_num % SHOW_EVERY == 0 and batch_processed_num != 0:
-                    _, preds = torch.topk(logits, k=1)
-                    preds2 = preds.squeeze(-1)
-                    yText = tokenizer.convert_ids_to_tokens(preds2[0].tolist())
-                    y_text_part = " ".join(yText[:min(10, len(yText))])
-                    xText = tokenizer.convert_ids_to_tokens(batch.source[0].tolist())
-                    x_text_part = " ".join(xText[:min(10, len(xText))])
-                    bar.set_description('Epoch {}/{} | '.format(epoch+1, num_epochs))
-                    bar.set_postfix_str(f'Loss: {loss.item():.5f}, pred: {y_text_part}, org: {x_text_part}')
-
-#                    print("orig:" + " ".join(xText))
-#                    print("pred:" + " ".join(yText))
-
-                    # print(epoch_result)
-
-            # loss and corrects per epoch
-            epoch_loss = epoch_loss / batch_processed_num
+            batch_processed_num += 1
+            SHOW_EVERY = config.show_every
+            if batch_processed_num % SHOW_EVERY == 0 and batch_processed_num != 0:
+                _, preds = torch.topk(logits, k=1)
+                preds2 = preds.squeeze(-1)
+                yText = tokenizer.convert_ids_to_tokens(preds2[0].tolist())
+                y_text_part = " ".join(yText[:min(10, len(yText))])
+                xText = tokenizer.convert_ids_to_tokens(batch.source[0].tolist())
+                x_text_part = " ".join(xText[:min(10, len(xText))])
+                goldText = tokenizer.convert_ids_to_tokens(batch.target[0].tolist())
+                gold_text_part = " ".join(goldText[:min(10, len(goldText))])
+                bar.set_description('Epoch {}/{} | '.format(epoch + 1, num_epochs))
+                bar.set_postfix_str(
+                    f'Loss: {loss.item():.5f}, pred: {y_text_part}, org: {x_text_part}, gold: {gold_text_part}')
+                bar.update(SHOW_EVERY)
 
 
-            print('\n Epoch {}/{} | {:^5} | Loss:{:.4f}'.format(epoch + 1, num_epochs, phase, epoch_loss))
+        # loss and corrects per epoch
+        epoch_loss = epoch_loss / batch_processed_num
+
+
+        print('\n Epoch {}/{} | Loss:{:.4f}'.format(epoch + 1, num_epochs, epoch_loss))
 
     return net
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
