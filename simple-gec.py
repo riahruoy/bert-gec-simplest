@@ -124,3 +124,35 @@ def train_model (net, dataloader, optimizer, num_epochs):
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
 
 net_trained = train_model(model, train_dl, optimizer, num_epochs=config.n_epoch)
+
+
+
+
+test_data = make_data_from_txt("data/fce.test.gold.bea19.m2.tsv", config.max_data_size, tokenizer)
+test_ds = GECDataset(test_data)
+test_dl = BalancedDataLoader(test_ds, tokenizer.pad_token_id, config.batch_size)
+
+net_trained.eval()
+for i, (x, y) in enumerate(test_dl):
+    # 5. BERTモデルでの予測とlossの計算、backpropの実行
+    batch = Batch(x.to(device), y.to(device), pad=tokenizer.pad_token_id)
+    outputs = net_trained(batch.source, token_type_ids=None, attention_mask=batch.source_mask, labels=batch.target)
+    # loss and accuracy
+    loss, logits = outputs[:2]
+
+    _, preds = torch.topk(logits, k=1)
+    preds2 = preds.squeeze(-1)
+    for j, v in enumerate(batch.source):
+        yText = tokenizer.convert_ids_to_tokens(preds2[j].tolist())
+        y_text_part = " ".join(yText[:min(30, len(yText))])
+        xText = tokenizer.convert_ids_to_tokens(batch.source[j].tolist())
+        x_text_part = " ".join(xText[:min(30, len(xText))])
+        goldText = tokenizer.convert_ids_to_tokens(batch.target[j].tolist())
+        gold_text_part = " ".join(goldText[:min(30, len(goldText))])
+        print("orig: " + x_text_part)
+        print("pred: " + y_text_part)
+        print("gold: " + gold_text_part)
+        print("-----")
+    if i >= 9:
+        break
+
