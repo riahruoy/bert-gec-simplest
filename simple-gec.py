@@ -11,11 +11,16 @@ from utils import seed_everything, make_data_from_txt, GECDataset, BalancedDataL
 import transformers
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
+import nltk
+nltk.download("punkt")
+nltk.download("averaged_perceptron_tagger")
+
+
 class Config:
     n_epoch = 10
     batch_size = 5
-    max_data_size = 1000
-    show_every = 10
+    max_data_size = 100
+    show_every = 50
     model_name = 'bert-base-uncased'
 
 class BertErrorCorrection(BertPreTrainedModel):
@@ -24,22 +29,31 @@ class BertErrorCorrection(BertPreTrainedModel):
         from transformers import BertModel
         from transformers.modeling_bert import BertEncoder
 
-        config = BertConfig(num_labels=vocab_size)
-        super(BertErrorCorrection, self).__init__(config)
-        self.num_labels = config.num_labels
+        self.config = BertConfig(num_labels=vocab_size)
+        self.config2 = BertConfig(vocab_size=64, num_hidden_layers=2, hidden_size=32, num_labels=20, num_attention_heads=2, intermediate_size=128)
+
+
+        super(BertErrorCorrection, self).__init__(self.config)
+        self.num_labels = self.config.num_labels
         self.bert = BertModel.from_pretrained('bert-base-uncased', output_attentions=True)
-        self.linear = nn.Linear(config.hidden_size, config.vocab_size)
+        self.pos_bert = BertModel(self.config2)
+
+        self.pos_linear = nn.Linear(self.config2.hidden_size, self.config.vocab_size)
+        self.linear = nn.Linear(self.config.hidden_size, self.config.vocab_size)
+
 
         self.init_weights()
         for _, param in self.bert.named_parameters():
             param.requires_grad = True
-        self.config = config
+        self.config = self.config
 
-    def forward (self, input_ids, token_type_ids=None, attention_mask=None, labels=None,
+    def forward (self, input_ids, partofspeech_ids, token_type_ids=None, attention_mask=None, labels=None,
                  position_ids=None, head_mask=None):
         bert_output = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
-                             attention_mask=attention_mask, head_mask=head_mask)
-        logits = self.linear(bert_output[0])
+                                     attention_mask=attention_mask, head_mask=head_mask)
+        pos_output = self.pos_bert(partofspeech_ids, position_ids=position_ids, token_type_ids=token_type_ids,
+                                   attention_mask=attention_mask, head_mask=head_mask)
+        logits = self.linear(bert_output[0]) + self.pos_linear(pos_output[0])
 
         outputs = (logits,) + bert_output[2:]  # add hidden states and attention if they are here
 
@@ -51,7 +65,7 @@ class BertErrorCorrection(BertPreTrainedModel):
         return outputs  # (loss), logits, (hidden_states), (attentions)
 
 
-#net = BertForSequenceClassification.from_pretrained(pre_trained_weights, num_labels=2, output_attentions=True)
+
 config = Config
 
 
@@ -80,13 +94,13 @@ def train_model (net, dataloader, optimizer, num_epochs):
         bar = tqdm(total=len(dataloader))
 
         # データローダーからミニバッチを取り出す
-        for i, (x, y) in enumerate(dataloader):
+        for i, (x, y, pos) in enumerate(dataloader):
             batch = Batch(x.to(device), y.to(device), pad=tokenizer.pad_token_id)
             # optimizerの初期化
             optimizer.zero_grad()
 
             # 5. BERTモデルでの予測とlossの計算、backpropの実行
-            outputs = net(batch.source, token_type_ids=None, attention_mask=batch.source_mask, labels=batch.target)
+            outputs = net(batch.source, pos, token_type_ids=None, attention_mask=batch.source_mask, labels=batch.target)
             # loss and accuracy
             loss, logits = outputs[:2]
 

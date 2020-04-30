@@ -6,7 +6,7 @@ import tqdm as tqdm
 from torch.nn.utils import rnn
 
 from torch.utils.data import Dataset, BatchSampler, RandomSampler
-
+import nltk
 
 def seed_everything(seed):
 
@@ -15,6 +15,21 @@ def seed_everything(seed):
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.benchmark = True
 
+pos_padid = 0
+pos_stoi = {'[PAD]': 0}
+
+def pos_encode(text):
+    global pos_stoi
+    tokens = nltk.word_tokenize(text)
+    tagged = nltk.pos_tag(tokens)
+    tag_list = []
+    for v in tagged:
+        tag = v[1]
+        if tag not in pos_stoi:
+            pos_stoi[tag] = len(pos_stoi)
+        tag_list += [pos_stoi[tag]]
+    return tag_list
+
 
 def make_data_from_txt(path, max_data_size, tokenizer):
     data = list()
@@ -22,7 +37,8 @@ def make_data_from_txt(path, max_data_size, tokenizer):
         lines = f.readlines()
     for i in range(0, min(len(lines), max_data_size)):
         s1, s2 = lines[i].replace('\n', '').split('\t')
-        data.append(tuple([tokenizer.encode(s1), tokenizer.encode(s2)]))
+        pos = pos_encode(s1)
+        data.append(tuple([tokenizer.encode(s1), tokenizer.encode(s2), pos]))
     return data
 
 
@@ -32,10 +48,11 @@ class GECDataset(Dataset):
         self.data = train_data
 
     def __getitem__(self, idx):
-        src, tgt = self.data[idx]
+        src, tgt, pos = self.data[idx]
         src = torch.LongTensor(src)
         tgt = torch.LongTensor(tgt)
-        return src, tgt
+        pos = torch.LongTensor(pos)
+        return src, tgt, pos
 
     def __len__(self):
         return len(self.data)
@@ -51,27 +68,29 @@ class BalancedDataLoader(BatchSampler):
     def __iter__(self):
         src_list = list()
         tgt_list = list()
-        src_tgt_list = list()
+        pos_list = list()
         # sampler is RandomSampler
         for i in self.sampler:
             self.count += 1
-            src, tgt = self.sampler.data_source[i]
+            src, tgt, pos = self.sampler.data_source[i]
             src_list.append(src)
             tgt_list.append(tgt)
+            pos_list.append(pos)
             if self.count % self.batch_size == 0:
                 assert len(src_list) == len(tgt_list)
 
                 # fill with padding for max sentence length of src_list, tgt_list
-                src_tgt_list = src_list + tgt_list
+                src_tgt_list = src_list + tgt_list + pos_list
                 size = len(src_list)
                 padded_src_tgt_list = rnn.pad_sequence(src_tgt_list, batch_first=True, padding_value=self.pad_id)
                 src = padded_src_tgt_list[:size]
-                tgt = padded_src_tgt_list[size:]
+                tgt = padded_src_tgt_list[size:size * 2]
+                pos = padded_src_tgt_list[size * 2 : ]
 
                 src_list.clear()
                 tgt_list.clear()
-                src_tgt_list.clear()
-                yield src, tgt
+                pos_list.clear()
+                yield src, tgt, pos
 
 def subsequent_mask(size: int) -> torch.Tensor:
     attn_shape = (1, size, size)
