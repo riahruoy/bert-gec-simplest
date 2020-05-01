@@ -25,6 +25,23 @@ def make_data_from_txt(path, max_data_size, tokenizer):
         data.append(tuple([tokenizer.encode(s1), tokenizer.encode(s2)]))
     return data
 
+def make_error_data_from_txt(path, max_data_size, tokenizer):
+    from m2utils.convert_from_m2 import Sentence
+    list = Sentence.readfile(path)
+    data = []
+    for i, s in enumerate(list):
+        str_array = s.question.split(' ')
+        # adding [CLS] flag  and one more for insertion after period
+        error_pos = [0] * (len(str_array) + 2)
+        for error in s.corrections:
+            # adding [CLS] flag
+            error_pos[error[0] + 1] = 1
+
+        data.append(tuple([tokenizer.encode(s.question), tokenizer.encode(s.getAnswer()), error_pos]))
+    return data
+
+
+
 
 class GECDataset(Dataset):
 
@@ -32,10 +49,11 @@ class GECDataset(Dataset):
         self.data = train_data
 
     def __getitem__(self, idx):
-        src, tgt = self.data[idx]
+        src, tgt, err = self.data[idx]
         src = torch.LongTensor(src)
         tgt = torch.LongTensor(tgt)
-        return src, tgt
+        err =  torch.LongTensor(err)
+        return src, tgt, err
 
     def __len__(self):
         return len(self.data)
@@ -51,27 +69,30 @@ class BalancedDataLoader(BatchSampler):
     def __iter__(self):
         src_list = list()
         tgt_list = list()
-        src_tgt_list = list()
+        err_list = list()
+
         # sampler is RandomSampler
         for i in self.sampler:
             self.count += 1
-            src, tgt = self.sampler.data_source[i]
+            src, tgt, err = self.sampler.data_source[i]
             src_list.append(src)
             tgt_list.append(tgt)
+            err_list.append(err)
             if self.count % self.batch_size == 0:
                 assert len(src_list) == len(tgt_list)
 
                 # fill with padding for max sentence length of src_list, tgt_list
-                src_tgt_list = src_list + tgt_list
+                consolidated_list = src_list + tgt_list + err_list
                 size = len(src_list)
-                padded_src_tgt_list = rnn.pad_sequence(src_tgt_list, batch_first=True, padding_value=self.pad_id)
-                src = padded_src_tgt_list[:size]
-                tgt = padded_src_tgt_list[size:]
+                padded_consolidated_list = rnn.pad_sequence(consolidated_list, batch_first=True, padding_value=self.pad_id)
+                src = padded_consolidated_list[:size]
+                tgt = padded_consolidated_list[size:size * 2]
+                err = padded_consolidated_list[size*2:]
 
                 src_list.clear()
                 tgt_list.clear()
-                src_tgt_list.clear()
-                yield src, tgt
+                err_list.clear()
+                yield src, tgt, err
 
 def subsequent_mask(size: int) -> torch.Tensor:
     attn_shape = (1, size, size)

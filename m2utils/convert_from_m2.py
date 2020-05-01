@@ -18,7 +18,7 @@ class Sentence:
         self.corrections = []
 
     def addCorrection(self, start, end, type, correction):
-        self.corrections.append([start, end, type, correction])
+        self.corrections.append([int(start), int(end), type, correction])
 
     def getAnswer(self):
         if len(self.corrections) == 0:
@@ -32,32 +32,35 @@ class Sentence:
             pos = int(correction[1])
         fixed += q_list[pos:]
         return ' '.join(fixed)
+    @staticmethod
+    def readfile(filename):
+        f = open(filename, "r")
+        block_start = False
+        sentences = []
+        current_sentence = Sentence("")
+
+        for line in f:
+            line = line.strip('\n')
+            if line == "":
+                if block_start:
+                    sentences.append(copy.deepcopy(current_sentence))
+                    block_start = False
+            elif line[0] == "S":
+                block_start = True
+                question = line[2:]
+                current_sentence = Sentence(question)
+            elif line[0] == "A":
+                if not block_start:
+                    print("format error")
+                index, type, correct, other1, other2, annotator = line.split('|||')
+                if type == "noop":
+                    continue
+                _, start, end = index.split(' ')
+                current_sentence.addCorrection(start, end, type, correct)
+        return sentences
 
 def readfile(filename):
-    f = open(filename, "r")
-    block_start = False
-    sentences = []
-    current_sentence = Sentence("")
-
-    for line in f:
-        line = line.strip('\n')
-        if line == "":
-            if block_start:
-                sentences.append(copy.deepcopy(current_sentence))
-                block_start = False
-        elif line[0] == "S":
-            block_start = True
-            question = line[2:]
-            current_sentence = Sentence(question)
-        elif line[0] == "A":
-            if not block_start:
-                print("format error")
-            index, type, correct, other1, other2, annotator = line.split('|||')
-            if type == "noop":
-                continue
-            _, start, end = index.split(' ')
-            current_sentence.addCorrection(start, end, type, correct)
-
+    sentences = Sentence.readfile(filename)
     # convert to question to answer
     src_list = []
     trg_list = []
