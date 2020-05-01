@@ -18,6 +18,8 @@ class Config:
     show_every = 10
     model_name = 'bert-base-uncased'
 
+
+
 class BertErrorCorrection(BertPreTrainedModel):
     def __init__ (self, vocab_size):
         from transformers import BertConfig
@@ -29,6 +31,7 @@ class BertErrorCorrection(BertPreTrainedModel):
         self.num_labels = config.num_labels
         self.bert = BertModel.from_pretrained('bert-base-uncased', output_attentions=True)
         self.linear = nn.Linear(config.hidden_size, config.vocab_size)
+        self.activation = nn.Sigmoid()
 
         self.init_weights()
         for _, param in self.bert.named_parameters():
@@ -39,7 +42,7 @@ class BertErrorCorrection(BertPreTrainedModel):
                  position_ids=None, head_mask=None):
         bert_output = self.bert(input_ids, position_ids=position_ids, token_type_ids=token_type_ids,
                              attention_mask=attention_mask, head_mask=head_mask)
-        logits = self.linear(bert_output[0])
+        logits = self.activation(self.linear(bert_output[0]))
 
         outputs = (logits,) + bert_output[2:]  # add hidden states and attention if they are here
 

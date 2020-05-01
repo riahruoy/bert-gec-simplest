@@ -5,7 +5,7 @@ import torch as torch
 import tqdm as tqdm
 from torch.nn.utils import rnn
 
-from torch.utils.data import Dataset, BatchSampler, RandomSampler
+from torch.utils.data import Dataset, BatchSampler, RandomSampler, SequentialSampler
 
 
 def seed_everything(seed):
@@ -63,6 +63,41 @@ class BalancedDataLoader(BatchSampler):
 
     def __init__(self, data: Dataset, pad_id: int, batch_size):
         super().__init__(RandomSampler(data), batch_size, True)
+        self.pad_id = pad_id
+        self.count = 0
+
+    def __iter__(self):
+        src_list = list()
+        tgt_list = list()
+        err_list = list()
+
+        # sampler is RandomSampler
+        for i in self.sampler:
+            self.count += 1
+            src, tgt, err = self.sampler.data_source[i]
+            src_list.append(src)
+            tgt_list.append(tgt)
+            err_list.append(err)
+            if self.count % self.batch_size == 0:
+                assert len(src_list) == len(tgt_list)
+
+                # fill with padding for max sentence length of src_list, tgt_list
+                consolidated_list = src_list + tgt_list + err_list
+                size = len(src_list)
+                padded_consolidated_list = rnn.pad_sequence(consolidated_list, batch_first=True, padding_value=self.pad_id)
+                src = padded_consolidated_list[:size]
+                tgt = padded_consolidated_list[size:size * 2]
+                err = padded_consolidated_list[size*2:]
+
+                src_list.clear()
+                tgt_list.clear()
+                err_list.clear()
+                yield src, tgt, err
+
+class SequentialDataLoader(BatchSampler):
+
+    def __init__(self, data: Dataset, pad_id: int, batch_size):
+        super().__init__(SequentialSampler(data), batch_size, True)
         self.pad_id = pad_id
         self.count = 0
 
