@@ -25,6 +25,8 @@ def make_data_from_txt(path, max_data_size, tokenizer):
         data.append(tuple([tokenizer.encode(s1), tokenizer.encode(s2)]))
     return data
 
+error_type_stoi = {"noop": 0}
+
 def make_error_data_from_txt(path, max_data_size, tokenizer):
     from m2utils.convert_from_m2 import Sentence
     list = Sentence.readfile(path)
@@ -35,10 +37,31 @@ def make_error_data_from_txt(path, max_data_size, tokenizer):
         error_pos = [0] * (len(str_array) + 2)
         for error in s.corrections:
             # adding [CLS] flag
-            error_pos[error[0] + 1] = 1
+            error_pos[error[0] + 1] = M2ErrorType.encode(error[2])
 
         data.append(tuple([tokenizer.encode(s.question), tokenizer.encode(s.getAnswer()), error_pos]))
     return data
+
+class M2ErrorType:
+    error_type_stoi = {"noop": 0}
+    error_type_itos = ["noop"]
+    vocab_size = 1
+
+    @staticmethod
+    def encode(type_text):
+        if type_text not in M2ErrorType.error_type_stoi:
+            M2ErrorType.error_type_stoi[type_text] = len(error_type_stoi)
+            M2ErrorType.error_type_itos.append(type_text)
+            M2ErrorType.vocab_size += 1
+        return M2ErrorType.error_type_stoi[type_text]
+    @staticmethod
+    def decode(id):
+        if id not in M2ErrorType.error_type_itos:
+            return "UNK"
+        return M2ErrorType.error_type_itos[id]
+
+
+
 
 
 

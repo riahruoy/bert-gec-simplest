@@ -9,7 +9,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import BertTokenizer, BertForSequenceClassification, BertForMaskedLM, BertModel, BertPreTrainedModel
 
-from utils import seed_everything, make_data_from_txt, GECDataset, BalancedDataLoader, Batch, make_error_data_from_txt
+from utils import seed_everything, make_data_from_txt, GECDataset, BalancedDataLoader, Batch, make_error_data_from_txt, \
+    SequentialDataLoader, M2ErrorType
 import transformers
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -28,11 +29,12 @@ class BertErrorDetection(BertPreTrainedModel):
         from transformers import BertModel
         from transformers.modeling_bert import BertEncoder
 
-        self.config = BertConfig(num_labels=2)
+        self.config = BertConfig(num_labels=M2ErrorType.vocab_size)
         super(BertErrorDetection, self).__init__(self.config)
         self.num_labels = self.config.num_labels
         self.bert = BertModel.from_pretrained('bert-base-uncased', output_attentions=True)
         self.dense = nn.Linear(self.config.hidden_size, self.num_labels)
+
 
         self.init_weights()
         for _, param in enumerate(self.parameters()):
@@ -46,7 +48,7 @@ class BertErrorDetection(BertPreTrainedModel):
 
         outputs = (logits,) + bert_output[2:]  # add hidden states and attention if they are here
 
-        loss_fct = CrossEntropyLoss()
+        loss_fct = CrossEntropyLoss(reduction='sum')
 
         loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1)).mean()
         outputs = (loss,) + outputs
@@ -104,8 +106,9 @@ def train_model (net, dataloader, optimizer, num_epochs):
             SHOW_EVERY = config.show_every
             THRESHOLD = 0.7
             if batch_processed_num % SHOW_EVERY == 0 and batch_processed_num != 0:
-                logits_np = logits[0].detach().numpy()
-                predindex = numpy.where(logits_np >= THRESHOLD)[0]
+                _, logits_ = torch.max(logits, dim=2)
+                logits_np = logits_.detach().numpy()
+                predindex = numpy.where(logits_np[0] >= THRESHOLD)[0]
                 y_np = batch.target[0].detach().numpy()
                 yindex = numpy.where(y_np >= THRESHOLD)[0]
                 xText = tokenizer.convert_ids_to_tokens(batch.source[0].tolist())
@@ -132,7 +135,7 @@ net_trained = train_model(model, train_dl, optimizer, num_epochs=config.n_epoch)
 
 test_data = make_data_from_txt("data/fce.test.gold.bea19.m2.tsv", config.max_data_size, tokenizer)
 test_ds = GECDataset(test_data)
-test_dl = BalancedDataLoader(test_ds, tokenizer.pad_token_id, config.batch_size)
+test_dl = SequentialDataLoader(test_ds, tokenizer.pad_token_id, config.batch_size)
 
 net_trained.eval()
 for i, (x, y) in enumerate(test_dl):
