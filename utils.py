@@ -50,7 +50,7 @@ class M2ErrorType:
     @staticmethod
     def encode(type_text):
         if type_text not in M2ErrorType.error_type_stoi:
-            M2ErrorType.error_type_stoi[type_text] = len(error_type_stoi)
+            M2ErrorType.error_type_stoi[type_text] = len(M2ErrorType.error_type_stoi)
             M2ErrorType.error_type_itos.append(type_text)
             M2ErrorType.vocab_size += 1
         return M2ErrorType.error_type_stoi[type_text]
