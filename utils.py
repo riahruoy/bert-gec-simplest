@@ -27,7 +27,7 @@ def make_data_from_txt(path, max_data_size, tokenizer):
 
 error_type_stoi = {"noop": 0}
 
-def make_error_data_from_txt(path, max_data_size, tokenizer):
+def make_error_data_from_txt(path, max_data_size, tokenizer, mode=0):
     from m2utils.convert_from_m2 import Sentence
     list = Sentence.readfile(path)
     data = []
@@ -37,7 +37,12 @@ def make_error_data_from_txt(path, max_data_size, tokenizer):
         error_pos = [0] * (len(str_array) + 2)
         for error in s.corrections:
             # adding [CLS] flag
-            error_pos[error[0] + 1] = M2ErrorType.encode(error[2])
+            if mode == 0:
+                error_pos[error[0] + 1] = 1
+            elif mode == 1:
+                error_pos[error[0] + 1] = error[1] - error[0]
+            elif mode == 2:
+                error_pos[error[0] + 1] = M2ErrorType.encode(error[2])
 
         data.append(tuple([tokenizer.encode(s.question), tokenizer.encode(s.getAnswer()), error_pos]))
     return data
