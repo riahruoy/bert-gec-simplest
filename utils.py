@@ -39,6 +39,7 @@ def make_error_data_from_txt(path, max_data_size, tokenizer, mode=0):
             # adding [CLS] flag
             if mode == 0:
                 error_pos[error[0] + 1] = 1
+                M2ErrorType.encode(error[2])
             elif mode == 1:
                 error_pos[error[0] + 1] = error[1] - error[0]
             elif mode == 2:
